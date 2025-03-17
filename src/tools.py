@@ -326,4 +326,153 @@ async def get_zillow_details(property_urls: List[str], for_rent: bool) -> List[D
         return filtered_results
     except Exception as e:
         Actor.log.error(f"Error during Zillow detail retrieval: {str(e)}")
-        return [] 
+        return []
+
+def generate_markdown_report(
+    search: str,
+    search_parameters: dict, 
+    recommendations: list,
+    summary: str
+) -> str:
+    """Generate a nicely formatted markdown report from the collected data"""
+    
+    # Create the report title based on search parameters
+    location = search_parameters.get('search_term', 'Real Estate')
+    transaction_type = "Rentals" if search_parameters.get('for_rent', False) else "Properties for Sale"
+    price_min = search_parameters.get('price_min', '')
+    price_max = search_parameters.get('price_max', '')
+    beds_min = search_parameters.get('beds_min', '')
+    
+    price_range = ""
+    if price_min and price_max:
+        price_range = f" (${price_min:,}-${price_max:,})"
+    elif price_min:
+        price_range = f" (${price_min:,}+)"
+    elif price_max:
+        price_range = f" (Up to ${price_max:,})"
+    
+    beds_text = f"{beds_min}+ Bedroom " if beds_min else ""
+    
+    title = f"# {beds_text}{transaction_type} in {location}{price_range}"
+    
+    # Add summary
+    summary_section = f"""
+## Summary
+
+{summary}
+"""
+    
+    # Add property listings
+    listings_section = """
+## Top Recommended Properties
+"""
+    
+    for i, prop in enumerate(recommendations, 1):
+        # Extract correct data from URL if needed
+        url = prop.get('url', '')
+        clean_url = url.split('"')[0] if '"' in url else url
+        
+        # Try to extract embedded data from URL
+        embedded_data = {}
+        if '"address:' in url:
+            try:
+                # Extract address
+                address_start = url.find('"address:')
+                address_end = url.find('"price:', address_start)
+                if address_start > -1 and address_end > -1:
+                    address = url[address_start+9:address_end].strip()
+                    embedded_data['address'] = address
+                
+                # Extract price
+                price_start = url.find('"price:')
+                price_end = url.find('"bedrooms:', price_start)
+                if price_start > -1 and price_end > -1:
+                    price_str = url[price_start+7:price_end].strip().strip('"')
+                    embedded_data['price'] = price_str
+                
+                # Extract bedrooms
+                bedrooms_start = url.find('"bedrooms:')
+                bedrooms_end = url.find('"bathrooms:', bedrooms_start)
+                if bedrooms_start > -1 and bedrooms_end > -1:
+                    bedrooms_str = url[bedrooms_start+10:bedrooms_end].strip().strip('"')
+                    embedded_data['bedrooms'] = bedrooms_str
+                
+                # Extract bathrooms
+                bathrooms_start = url.find('"bathrooms:')
+                bathrooms_end = url.find('"key_features:', bathrooms_start) if '"key_features:' in url else url.find('"match_reason:', bathrooms_start)
+                if bathrooms_start > -1 and bathrooms_end > -1:
+                    bathrooms_str = url[bathrooms_start+11:bathrooms_end].strip().strip('"')
+                    embedded_data['bathrooms'] = bathrooms_str
+            except Exception:
+                # If parsing fails, just use the original property data
+                pass
+        
+        # Use embedded data if available, otherwise use original property data
+        price = embedded_data.get('price', prop.get('price', 'Price not specified'))
+        if not isinstance(price, str) and isinstance(price, (int, float)):
+            price = f"${price:,}"
+            
+        beds = embedded_data.get('bedrooms', prop.get('bedrooms', ''))
+        baths = embedded_data.get('bathrooms', prop.get('bathrooms', ''))
+        beds_baths = f"{beds} bed" if beds else ""
+        beds_baths += f", {baths} bath" if baths else ""
+        
+        # Use embedded address if available, otherwise use original address
+        if 'address' in embedded_data:
+            address = embedded_data['address']
+        else:
+            street_address = prop.get('streetAddress', '')
+            city = prop.get('city', '')
+            state = prop.get('state', '')
+            zipcode = prop.get('zipcode', '')
+            address = f"{street_address}, {city}, {state} {zipcode}".strip()
+            if address == ", ,  ":
+                address = "Address not available"
+        
+        # Get amenities
+        amenities = prop.get('amenities', [])
+        community_amenities = prop.get('communityAmenities', [])
+        appliances = prop.get('appliances', [])
+        all_features = []
+        
+        if amenities and isinstance(amenities, list):
+            all_features.extend(amenities)
+        if community_amenities and isinstance(community_amenities, list):
+            all_features.extend(community_amenities)
+        if appliances and isinstance(appliances, list):
+            all_features.extend([a for a in appliances if a != "Unknown"])
+        
+        # Create a unique set of features (remove duplicates)
+        unique_features = list(set(all_features))
+        
+        # Format features as bullet points if any exist
+        features_text = ""
+        if unique_features:
+            features_text = "\n\n**Features:**\n" + "\n".join([f"- {feature}" for feature in unique_features[:10]])
+            if len(unique_features) > 10:
+                features_text += "\n- *(and more)*"
+        
+        # Get the match reason
+        match_reason = prop.get('match_reason', '')
+        reason_text = f"\n\n**Why This Property Matches Your Needs:**\n{match_reason}" if match_reason else ""
+        
+        # Get description
+        description = prop.get('description', '')
+        description_excerpt = (description[:300] + "...") if description else "No description available"
+        
+        # Build the property listing
+        listings_section += f"""
+### {i}. {address}
+
+**{price}** | {beds_baths}
+
+{description_excerpt} [See more]({clean_url})
+{features_text}{reason_text}
+
+---
+"""
+    
+    # Combine all sections
+    markdown_report = f"{title}\n{summary_section}\n{listings_section}"
+    
+    return markdown_report 

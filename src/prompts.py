@@ -57,13 +57,9 @@ When analyzing properties, consider:
 Your response MUST follow this exact structure to be properly processed:
 
 For each recommended property, include:
-- address: Full property address
-- price: Property price as a string
-- bedrooms: Number of bedrooms as a string
-- bathrooms: Number of bathrooms as a string
-- key_features: List of 3-5 notable features about the property
 - match_reason: Detailed explanation of why this property is a good match
+- url: The complete Zillow URL for the property (CRITICAL - must be exact)
 
 End with a concise summary comparing the selected properties and highlighting the best overall options.
 
-IMPORTANT: You must return exactly 5 properties. Ensure all property data follows the format specified above.''' 
+IMPORTANT: You must return exactly 5 properties. Ensure all property data follows the format specified above. The URL field is critical for proper functioning.''' 

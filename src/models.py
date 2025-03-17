@@ -37,12 +37,8 @@ class ZillowSearchParameters(BaseModel):
     onsite_parking: Optional[bool] = Field(None, description="Onsite parking available")
     
 class Property(BaseModel):
-    address: str
-    price: str
-    bedrooms: str
-    bathrooms: str
-    key_features: List[str]
     match_reason: str
+    url: str = Field(..., description="The property's Zillow URL")
 
 class RealEstateAgentResult(BaseModel):
     properties: List[Property]

@@ -1,0 +1,16 @@
+{
+    "title": "Real Estate Agent Input",
+    "description": "Configure your real estate search details.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "search": {
+            "title": "Search",
+            "description": "Describe the property you're looking for.",
+            "type": "string",
+            "editor": "textarea",
+            "prefill": "Searching for a 2-bedroom apartment in San Francisco, CA, with a monthly rent between $2000 and $4000, and preferably featuring amenities such as parking and a gym."
+        }
+    },
+    "required": ["search"]
+}

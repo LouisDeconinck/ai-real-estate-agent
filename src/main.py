@@ -11,7 +11,7 @@ import json
 
 from .prompts import ZILLOW_SEARCH_EXPERT_SYSTEM_PROMPT, REAL_ESTATE_AGENT_SYSTEM_PROMPT
 from .models import ZillowSearchParameters, Deps, RealEstateAgentResult
-from .tools import construct_zillow_url, search_zillow, get_zillow_details
+from .tools import construct_zillow_url, search_zillow, get_zillow_details, generate_markdown_report
 
 load_dotenv()
 
@@ -74,23 +74,64 @@ async def main() -> None:
         await default_kv_store.set_value('zillow_details', zillow_details)
         
         try:
-            # Use all Zillow details for analysis
-            agent_result = await real_estate_agent.run(
-                f"Analyze these properties. Select the top 5 meeting the client's needs, provide your reasoning and an overall summary: {search}\n\nHere are all the properties:\n{json.dumps(zillow_details, indent=2)}",
-            )
+            # Update prompt to include requirement for URL
+            modified_prompt = f"Analyze these properties. Select the top 5 meeting the client's needs, provide your reasoning and an overall summary. For each property, be sure to include its exact URL: {search}\n\nHere are all the properties:\n{json.dumps(zillow_details, indent=2)}"
+            
+            agent_result = await real_estate_agent.run(modified_prompt)
             
             # Charge for token usage from real estate agent
             agent_usage = agent_result.usage()
             await Actor.charge(event_name='1k-llm-tokens', count=math.ceil(agent_usage.total_tokens / 1000))
             
-            # Add real estate agent recommendations to output
-            output_data['property_recommendations'] = [prop.model_dump() for prop in agent_result.data.properties]
+            # Create a dictionary mapping URLs to their full zillow_details
+            url_to_details = {prop.get('url', ''): prop for prop in zillow_details}
+            
+            # Merge AI recommendations with full property details
+            enhanced_recommendations = []
+            for ai_prop in agent_result.data.properties:
+                # Get the URL from the AI's evaluation
+                ai_prop_data = ai_prop.model_dump()
+                url = ai_prop_data.get('url', '')
+                
+                # Find matching property in zillow_details by URL
+                full_property_details = url_to_details.get(url)
+                
+                if full_property_details:
+                    # Keep all the original Zillow details
+                    enhanced_property = dict(full_property_details)
+                    # Add the AI's reason
+                    enhanced_property['match_reason'] = ai_prop_data.get('match_reason', '')
+                    enhanced_recommendations.append(enhanced_property)
+                else:
+                    # If no match found, use the AI's data as fallback
+                    enhanced_recommendations.append(ai_prop_data)
+            
+            # Add enhanced recommendations to output
+            output_data['property_recommendations'] = enhanced_recommendations
             output_data['summary'] = agent_result.data.summary
+            
+            # Generate markdown report
+            markdown_report = generate_markdown_report(
+                search=search,
+                search_parameters=output_data['search_parameters'],
+                recommendations=output_data['property_recommendations'],
+                summary=output_data['summary']
+            )
+            
+            # Add markdown report to output data
+            output_data['markdown_report'] = markdown_report
+            
+            # Save markdown report to KV store as well
+            await default_kv_store.set_value('property_report.md', markdown_report)
+            
+            # Log success
+            Actor.log.info("Markdown report generated and saved successfully")
             
         except Exception as e:
             Actor.log.error(f"Error during property analysis: {str(e)}")
             output_data['property_recommendations'] = []
             output_data['summary'] = "Unable to analyze properties due to an error"
+            output_data['markdown_report'] = "# Error\n\nUnable to generate property report due to an error."
         
         # Push the result to Apify
         await Actor.push_data(output_data)

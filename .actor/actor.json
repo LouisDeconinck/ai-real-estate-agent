@@ -1,12 +1,51 @@
 {
 	"actorSpecification": 1,
 	"name": "ai-real-estate-agent",
-	"title": "Empty Python project",
-	"description": "Empty project in Python.",
+	"title": "AI Real Estate Agent",
+	"description": "AI Real Estate Agent",
 	"version": "0.0",
 	"buildTag": "latest",
 	"meta": {
 		"templateId": "python-empty"
 	},
-	"dockerfile": "./Dockerfile"
+	"dockerfile": "./Dockerfile",
+	"storages": {
+		"dataset": {
+			"actorSpecification": 1,
+			"views": {
+				"overview": {
+					"title": "Travel Plan",
+					"transformation": {
+						"fields": [
+							"search_parameters",
+							"property_recommendations",
+							"summary",
+							"markdown_report"
+						]
+					},
+					"display": {
+						"component": "table",
+						"properties": {
+							"search_parameters": {
+								"label": "Search Parameters",
+								"format": "json"
+							},
+							"property_recommendations": {
+								"label": "Property Recommendations",
+								"format": "array"
+							},
+							"summary": {
+								"label": "Summary",
+								"format": "text"
+							},
+							"markdown_report": {
+								"label": "Markdown Report",
+								"format": "text"
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
