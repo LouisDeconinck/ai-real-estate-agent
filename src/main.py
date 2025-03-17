@@ -60,9 +60,14 @@ async def main() -> None:
         # Get the details of the properties
         zillow_details = await get_zillow_details(property_urls=zillow_results, for_rent=zillow_parameters.data.for_rent)
         
-        # Add the Zillow URL to the output data
-        output_data = zillow_parameters.data.model_dump()
-        output_data['zillow_url'] = zillow_url
+        # Create search_parameters object
+        search_parameters = zillow_parameters.data.model_dump()
+        search_parameters['zillow_url'] = zillow_url
+        
+        # Initialize output_data dictionary
+        output_data = {
+            'search_parameters': search_parameters
+        }
         
         # Save Zillow details to KV store
         default_kv_store = await Actor.open_key_value_store()

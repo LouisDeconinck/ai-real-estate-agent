@@ -30,7 +30,6 @@ async def get_map_bounds(search_term: str) -> Tuple[float, float, float, float]:
     url = f"https://api.opencagedata.com/geocode/v1/json?q={encoded_search}&key={opencage_api_key}&no_annotations=1"
     
     try:
-        Actor.log.info(f"Attempting to geocode '{search_term}'")
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -262,13 +261,40 @@ async def get_zillow_details(property_urls: List[str], for_rent: bool) -> List[D
                 "streetAddress": item.get("streetAddress") or safe_get(item, "address", "streetAddress"),
                 "zipcode": item.get("zipcode") or safe_get(item, "address", "zipcode"),
                 "country": item.get("country"),
-                "bedrooms": item.get("bedrooms"),
-                "bathrooms": item.get("bathrooms"),
-                "price": item.get("price"),
                 "yearBuilt": item.get("yearBuilt"),
                 "description": item.get("description"),
                 "url": item.get("addressOrUrlFromInput") or item.get("url")
             }
+            
+            # Process floor plans for apartments to get average beds, baths, and price
+            floor_plans = safe_get(item, "floorPlans")
+            if floor_plans and len(floor_plans) > 0:
+                total_beds = 0
+                total_baths = 0
+                total_price = 0
+                count = 0
+                
+                for plan in floor_plans:
+                    if plan.get("beds") is not None and plan.get("baths") is not None:
+                        count += 1
+                        total_beds += plan.get("beds", 0)
+                        total_baths += plan.get("baths", 0)
+                        # Use minPrice or maxPrice, whichever is available
+                        price = plan.get("minPrice") or plan.get("maxPrice", 0)
+                        total_price += price
+                
+                if count > 0:
+                    filtered_item["bedrooms"] = int(total_beds / count)
+                    filtered_item["bathrooms"] = int(total_baths / count)
+                    filtered_item["price"] = int(total_price / count)
+                else:
+                    filtered_item["bedrooms"] = item.get("bedrooms")
+                    filtered_item["bathrooms"] = item.get("bathrooms")
+                    filtered_item["price"] = item.get("price")
+            else:
+                filtered_item["bedrooms"] = item.get("bedrooms")
+                filtered_item["bathrooms"] = item.get("bathrooms")
+                filtered_item["price"] = item.get("price")
             
             # Complex nested properties
             homeinsights = safe_get(item, "homeinsights")
@@ -282,9 +308,9 @@ async def get_zillow_details(property_urls: List[str], for_rent: bool) -> List[D
             filtered_item["amenities"] = safe_get(item, "amenityDetails", "customAmenities", "rawAmenities")
             filtered_item["communityAmenities"] = safe_get(item, "commonUnitAmenities")
             
-            # Complex conditional property
-            building_appliances = safe_get(item, "buildingAttributes", "appliances")
-            reso_appliances = safe_get(item, "resoFacts", "appliances")
+            # Complex conditional property - add null checks before concatenating
+            building_appliances = safe_get(item, "buildingAttributes", "appliances") or []
+            reso_appliances = safe_get(item, "resoFacts", "appliances") or []
             filtered_item["appliances"] = list(set(building_appliances + reso_appliances))
             
             # Scores
